@@ -1,7 +1,7 @@
 from django.urls import path
 from cloud_providers.views import (
-    ListEC2Instances, CreateEC2Instance, RetrieveAzureCosts, RetrieveAzureCostsByService, StartEC2Instance, StopEC2Instance, TerminateEC2Instance,
-    ListS3Buckets, CreateS3Bucket, DeleteS3Bucket, UploadFileToS3, DownloadFileFromS3, ListS3Objects,
+    CordonNodeView, DrainNodeView, ListEC2Instances, CreateEC2Instance, RetrieveAzureCosts, RetrieveAzureCostsByService, StartEC2Instance, StopEC2Instance, TerminateEC2Instance,
+    ListS3Buckets, CreateS3Bucket, DeleteS3Bucket, UncordonNodeView, UploadFile, UploadFileToS3, DownloadFileFromS3, ListS3Objects,
     DeleteS3Object, GeneratePresignedUrl, ListKeyPairs, CreateKeyPair, DeleteAWSKeyPair,
     ListHetznerInstances, CreateHetznerInstance, StartHetznerInstance, StopHetznerInstance,
     TerminateHetznerInstance, ListHetznerKeyPairs, CreateHetznerKeyPair, DeleteHetznerKeyPair,
@@ -11,7 +11,9 @@ from cloud_providers.views import (
     ListAzureInstances, CreateAzureInstance, StartAzureInstance, StopAzureInstance, TerminateAzureInstance,
     ListAzureBuckets, CreateAzureBucket, DeleteAzureBucket, UploadFileToAzure, DownloadFileFromAzure,
     ListAzureObjects, DeleteAzureObject, GenerateAzurePresignedUrl, RetrieveCosts, DeployDockerImage, DeployDockerImageToCluster,
-    AzureListClusters, AzureGetCluster, AzureDeleteCluster, ListAWSClusters, GetAWSCluster, DeleteAWSCluster, CreateAndDeployAWSCluster
+    ListClusters, AzureGetCluster, DeleteCluster, ListAWSClusters, GetAWSCluster, DeleteAWSCluster, CreateAndDeployAWSCluster,
+    InstanceView, StartInstance, StopInstance, RestartInstance, TerminateInstance, ListAllObjects,
+    GeneratePresignedUrl, DeleteObject,
 )
 
 urlpatterns = [
@@ -78,9 +80,7 @@ urlpatterns = [
     path('azure/presigned-url/', GenerateAzurePresignedUrl.as_view(), name='generate_azure_presigned_url'),
     path('azure/costs/', RetrieveAzureCosts.as_view(), name='retrieve_azure_costs'),
     path('azure/costs-by-service/', RetrieveAzureCostsByService.as_view(), name='retrieve_azure_costs_by_service'),
-    path('azure/clusters/', AzureListClusters.as_view(), name='list-clusters'),
     path('azure/clusters/<str:cluster_name>/', AzureGetCluster.as_view(), name='get-cluster'),
-    path('azure/clusters/<str:cluster_name>/delete/', AzureDeleteCluster.as_view(), name='delete-cluster'),
 
     # Cost Management
     path('costs/retrieve/', RetrieveCosts.as_view(), name='retrieve_costs'),
@@ -88,4 +88,23 @@ urlpatterns = [
     # Docker Deployment
     path('docker/deploy/', DeployDockerImage.as_view(), name='deploy_docker_image'),
     path('docker/cluster/deploy/', DeployDockerImageToCluster.as_view(), name='deploy_docker_image_to_cluster'),
+    path('docker/clusters/', ListClusters.as_view(), name='list-clusters'),
+    path('docker/clusters/node/cordon/', CordonNodeView.as_view(), name='cordon-node'),
+    path('docker/clusters/node/drain/', DrainNodeView.as_view(), name='uncordon-node'),
+    path('docker/clusters/node/uncordon/', UncordonNodeView.as_view(), name='uncordon-node'),
+    path('docker/clusters/<str:cluster_name>/delete/', DeleteCluster.as_view(), name='delete-cluster'),
+
+    # General
+    path('instances/', InstanceView.as_view(), name='list_instances'),
+    path('instances/start/', StartInstance.as_view(), name='start_instances'),
+    path('instances/stop/', StopInstance.as_view(), name='stop_instances'),
+    path('instances/restart/', RestartInstance.as_view(), name='restart_instances'),
+    path('instances/terminate/', TerminateInstance.as_view(), name='terminate_instances'),
+    path('objects/', ListAllObjects.as_view(), name='list_objects'),
+    path('objects/generate-presigned-url/', GeneratePresignedUrl.as_view(), name='generate-presigned-url'),
+    path('objects/upload-file/', UploadFile.as_view(), name='upload-file'),
+    path('objects/delete-object/', DeleteObject.as_view(), name='delete-object'),
+
+
+
 ]

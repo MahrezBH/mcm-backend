@@ -17,11 +17,20 @@ import subprocess
 from cloud_providers.services.base import BaseCloudManager, logger
 from cloud_providers.services.shared import inspect_image
 
+GCP_STATUS_MAP = {
+    'PROVISIONING': 'pending',
+    'STAGING': 'pending',
+    'RUNNING': 'running',
+    'STOPPING': 'stopped',
+    'TERMINATED': 'terminated',
+    'STOPPED': 'stopped'
+}
+
 
 class GCPManager(BaseCloudManager):
     def __init__(self, os_username='ubuntu'):
         super().__init__(os_username)
-        self.credentials = service_account.Credentials.from_service_account_file(settings.GCP_SERVICE_ACCOUNT_FILE)
+        self.credentials = service_account.Credentials.from_service_account_info(settings.GCP_SERVICE_ACCOUNT_INFO)
         self.compute_client = compute_v1.InstancesClient(credentials=self.credentials)
         self.zone_operations_client = compute_v1.ZoneOperationsClient(credentials=self.credentials)
         self.project = settings.GCP_PROJECT_ID
@@ -35,7 +44,11 @@ class GCPManager(BaseCloudManager):
     def list_instances(self):
         request = compute_v1.ListInstancesRequest(project=self.project, zone=self.zone)
         response = self.compute_client.list(request=request)
-        return [instance for instance in response]
+        return [self.serialize_instance(instance) for instance in response]
+
+    def extract_machine_type(self, machine_type_url):
+        # Extract the machine type from the full URL
+        return machine_type_url.split('/')[-1] if machine_type_url else 'unknown'
 
     def create_instance(self, name, machine_type, source_image, ssh_key):
         try:
@@ -43,7 +56,7 @@ class GCPManager(BaseCloudManager):
                 ssh_key = key_file.read().strip()
         except:
             logger.info("{} is not a path like file".format(ssh_key))
-
+        print(f'ssh_key: {ssh_key}')
         instance = compute_v1.Instance(
             name=name,
             machine_type=f"zones/{self.zone}/machineTypes/{machine_type}",
@@ -66,8 +79,26 @@ class GCPManager(BaseCloudManager):
 
         logger.info("Instance created successfully")
 
-        instance = self._wait_for_network_interfaces(name)
-        return instance
+        # instance = self._wait_for_network_interfaces(name)
+        # print(type(instance))
+        return self.serialize_instance(instance=instance)
+
+    def serialize_instance(self, instance):
+        # print(instance)
+        nic = instance.network_interfaces[0]
+        public_ip = nic.access_configs[0].nat_i_p if nic.access_configs else None
+
+        return {
+            "provider": "gcp",
+            "id": instance.id,
+            "name": instance.name,
+            "status": GCP_STATUS_MAP.get(instance.status, 'Unknown'),
+            "created_at": instance.creation_timestamp.isoformat() if isinstance(instance.creation_timestamp, datetime.datetime) else instance.creation_timestamp,
+            "zone": instance.zone,
+            "machine_type": self.extract_machine_type(instance.machine_type),
+            "network_ip": nic.network_i_p,
+            "external_ip": public_ip,
+        }
 
     def manage_instance(self, action, instance_name):
         method = getattr(self.compute_client, action)
@@ -124,7 +155,7 @@ class GCPManager(BaseCloudManager):
         blob = bucket.blob(object_name)
 
         # Calculate the expiration time
-        expiration_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=expiration)
+        expiration_time = datetime.datetime.utcnow() + datetime.timedelta(seconds=int(expiration))
 
         # Generate the signed URL
         url = blob.generate_signed_url(expiration=expiration_time, version='v4')
@@ -133,10 +164,13 @@ class GCPManager(BaseCloudManager):
     def create_docker_image_server(self, name, machine_type, image, source_image, ssh_key_path=settings.SSH_PUBLIC_KEY, ssh_private_key_path=settings.SSH_PRIVATE_KEY):
         # Create the instance
         instance = self.create_instance(name, machine_type, source_image, ssh_key_path)
-
+        print(f'name=> {name}')
+        print(f'instance=> {instance}')
         # Get the public IP address of the instance
+        instance = self._wait_for_network_interfaces(name)
         ip_address = instance.network_interfaces[0].access_configs[0].nat_i_p
 
+        print(f'ip_address: {ip_address}')
         # Wait for SSH to be available and install Docker on the instance
         self.wait_for_ssh(ip_address, ssh_private_key_path)
         self.install_docker(ip_address, ssh_private_key_path)

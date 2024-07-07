@@ -1,3 +1,6 @@
+from kubernetes import client, config
+import logging
+from azure.mgmt.compute.models import InstanceViewTypes
 from azure.identity import ClientSecretCredential, DefaultAzureCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.storage import StorageManagementClient
@@ -21,8 +24,18 @@ from azure.mgmt.containerservice.models import ManagedCluster, ManagedClusterAge
 import subprocess
 import os
 
+AZURE_STATUS_MAP = {
+    'Provisioning': 'pending',
+    'Running': 'running',
+    'Succeeded': 'running',
+    'Stopped': 'stopped',
+    'Stopping': 'stopped',
+    'Deallocating': 'stopped',
+    'Deallocated': 'stopped'
+}
 
-class AzureManager:
+
+class AzureManager(BaseCloudManager):
     def __init__(self, os_username='ubuntu'):
         self.os_username = os_username
         self.credentials = ClientSecretCredential(
@@ -95,7 +108,31 @@ class AzureManager:
                 else:
                     raise Exception("Failed to get AKS credentials after multiple attempts.")
 
-    def generate_deployment_yaml(self, image_name, deployment_name='myapp-deployment', container_port=5000):
+    def get_cluster_nodes(self, k8s_client):
+        nodes = k8s_client.list_node()
+        return [{
+            "name": node.metadata.name,
+            "status": node.status.conditions[-1].type,
+            "addresses": [{
+                "type": addr.type,
+                "address": addr.address
+            } for addr in node.status.addresses]
+        } for node in nodes.items]
+
+    def get_cluster_pods(self, k8s_client):
+        pods = k8s_client.list_pod_for_all_namespaces(watch=False)
+        return [{
+            "name": pod.metadata.name,
+            "namespace": pod.metadata.namespace,
+            "node_name": pod.spec.node_name,
+            "status": pod.status.phase
+        } for pod in pods.items]
+
+    def get_k8s_client(self, kubeconfig_path):
+        config.load_kube_config(config_file=kubeconfig_path)
+        return client.CoreV1Api()
+
+    def generate_deployment_yaml(self, image_name, deployment_name='myapp-deployment', container_port=5000, image_pull_secret='my-registry-secret'):
         deployment = {
             'apiVersion': 'apps/v1',
             'kind': 'Deployment',
@@ -109,13 +146,36 @@ class AzureManager:
                         'containers': [{
                             'name': deployment_name,
                             'image': image_name,
-                            'ports': [{'containerPort': container_port}]
-                        }]
+                            'ports': [{'containerPort': int(container_port)}]  # Ensure containerPort is an integer
+                        }],
+                        'imagePullSecrets': [{'name': image_pull_secret}]
                     }
                 }
             }
         }
         return yaml.dump(deployment)
+
+    # def generate_deployment_yaml(self, image_name, deployment_name='myapp-deployment', container_port=5000):
+    #     deployment = {
+    #         'apiVersion': 'apps/v1',
+    #         'kind': 'Deployment',
+    #         'metadata': {'name': deployment_name},
+    #         'spec': {
+    #             'replicas': 3,
+    #             'selector': {'matchLabels': {'app': deployment_name}},
+    #             'template': {
+    #                 'metadata': {'labels': {'app': deployment_name}},
+    #                 'spec': {
+    #                     'containers': [{
+    #                         'name': deployment_name,
+    #                         'image': image_name,
+    #                         'ports': [{'containerPort': container_port}]
+    #                     }]
+    #                 }
+    #             }
+    #         }
+    #     }
+    #     return yaml.dump(deployment)
 
     def generate_service_yaml(self, service_name='myapp-service', deployment_name='myapp-deployment', service_port=80, container_port=5000):
         service = {
@@ -124,7 +184,7 @@ class AzureManager:
             'metadata': {'name': service_name},
             'spec': {
                 'selector': {'app': deployment_name},
-                'ports': [{'protocol': 'TCP', 'port': service_port, 'targetPort': container_port}],
+                'ports': [{'protocol': 'TCP', 'port': int(service_port), 'targetPort': int(container_port)}],  # Ensure targetPort is an integer
                 'type': 'LoadBalancer'
             }
         }
@@ -138,10 +198,16 @@ class AzureManager:
             raise Exception(f"Error applying YAML: {stderr.decode('utf-8')}")
         print(f"YAML applied successfully: {stdout.decode('utf-8')}")
 
-    def deploy_and_create_cluster(self, cluster_name, image_name, service_name, node_count=3, vm_size='Standard_DS2_v2', container_port=5000):
+    def deploy_and_create_cluster(self, cluster_name, image_name, service_name, node_count=3, vm_size='Standard_DS2_v2', container_port=5000, insecure_registry=None):
         # Create AKS cluster
         cluster = self.create_aks_cluster(cluster_name, node_count=node_count, vm_size=vm_size)
         kubeconfig_path = self.get_aks_credentials(self.resource_group, cluster_name)
+
+        if insecure_registry:
+            # Apply DaemonSet for insecure registries
+            daemonset_yaml_content = self.generate_docker_config_daemonset_yaml(insecure_registry)
+            print(f"Applying DaemonSet YAML: {daemonset_yaml_content}")
+            self.apply_yaml(kubeconfig_path, daemonset_yaml_content)
 
         # Generate and apply deployment YAML
         deployment_yaml_content = self.generate_deployment_yaml(image_name, container_port=container_port)
@@ -154,18 +220,69 @@ class AzureManager:
         self.apply_yaml(kubeconfig_path, service_yaml_content)
         return {"cluster": cluster, "kubeconfig_path": kubeconfig_path}
 
-    def cordon_node(self, resource_group, cluster_name, node_name):
-        self.get_aks_credentials(resource_group, cluster_name)
+    def generate_docker_config_daemonset_yaml(self, insecure_registry):
+        daemonset_yaml = f"""
+        apiVersion: apps/v1
+        kind: DaemonSet
+        metadata:
+        name: docker-config
+        namespace: kube-system
+        spec:
+        selector:
+            matchLabels:
+            name: docker-config
+        template:
+            metadata:
+            labels:
+                name: docker-config
+        spec:
+            containers:
+            - name: docker-config
+            image: busybox
+            command:
+            - sh
+            - -c
+            - |
+                cp /tmp/daemon.json /etc/docker/daemon.json
+                systemctl restart docker
+            volumeMounts:
+            - name: docker-config-volume
+                mountPath: /tmp/daemon.json
+                subPath: daemon.json
+            securityContext:
+                privileged: true
+            hostNetwork: true
+            hostPID: true
+            volumes:
+            - name: docker-config-volume
+            configMap:
+                name: docker-config
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+        name: docker-config
+        namespace: kube-system
+        data:
+        daemon.json: |
+            {{
+            "insecure-registries": ["{insecure_registry}"]
+            }}
+        """
+        return daemonset_yaml
+
+    def cordon_node(self, cluster_name, node_name):
+        self.get_aks_credentials(self.resource_group, cluster_name)
         cmd = ['kubectl', 'cordon', node_name]
         subprocess.run(cmd, check=True)
 
-    def drain_node(self, resource_group, cluster_name, node_name):
-        self.get_aks_credentials(resource_group, cluster_name)
+    def drain_node(self, cluster_name, node_name):
+        self.get_aks_credentials(self.resource_group, cluster_name)
         cmd = ['kubectl', 'drain', node_name, '--ignore-daemonsets', '--delete-local-data']
         subprocess.run(cmd, check=True)
 
-    def uncordon_node(self, resource_group, cluster_name, node_name):
-        self.get_aks_credentials(resource_group, cluster_name)
+    def uncordon_node(self, cluster_name, node_name):
+        self.get_aks_credentials(self.resource_group, cluster_name)
         cmd = ['kubectl', 'uncordon', node_name]
         subprocess.run(cmd, check=True)
 
@@ -217,6 +334,11 @@ class AzureManager:
         kubeconfig_path = self.get_aks_credentials(self.resource_group, cluster_name)
         external_ip = self.get_service_external_ip(kubeconfig_path)
 
+        # Get Kubernetes client and retrieve pods and nodes
+        k8s_client = self.get_k8s_client(kubeconfig_path)
+        # pods = self.get_cluster_pods(k8s_client)
+        nodes = self.get_cluster_nodes(k8s_client)
+
         # Extract relevant information
         relevant_info = {
             "id": cluster_info.get("id"),
@@ -245,7 +367,9 @@ class AzureManager:
                 "outbound_type": cluster_info.get("network_profile", {}).get("outbound_type"),
                 "load_balancer_sku": cluster_info.get("network_profile", {}).get("load_balancer_sku")
             },
-            "service_external_ip": external_ip
+            "service_external_ip": external_ip,
+            # "pods": pods,
+            "nodes": nodes
         }
 
         return relevant_info
@@ -257,6 +381,7 @@ class AzureManager:
     # Compute (VM) Methods
 
     def serialize_instance(self, instance):
+        print(f'instance: {instance}')
         nic_id = instance.network_profile.network_interfaces[0].id
         network_interface = self.network_client.network_interfaces.get(
             self.resource_group, nic_id.split('/')[-1]
@@ -269,22 +394,56 @@ class AzureManager:
                 self.resource_group, ip_config.public_ip_address.id.split('/')[-1]
             )
             public_ip_address = public_ip.ip_address
-
+        print(instance)
         return {
+            "provider": "azure",
             "id": instance.id,
             "name": instance.name,
-            "status": instance.provisioning_state,
-            "creation_timestamp": instance.time_created,
+            "status": self.get_instance_status(instance),
+            "created_at": instance.time_created,
             "zone": instance.location,
             "machine_type": instance.hardware_profile.vm_size,
             "network_ip": ip_config.private_ip_address,
             "external_ip": public_ip_address,
         }
 
+    def get_instance_status(self, instance):
+        instance_view = instance.instance_view
+        if instance_view and instance_view.statuses:
+            for status in instance_view.statuses:
+                if 'PowerState' in status.code:
+                    return self.map_to_unified_status(status.code)
+        return self.map_to_unified_status(instance.provisioning_state)
+
+    def map_to_unified_status(self, azure_status):
+        status_mapping = {
+            'PowerState/running': 'running',
+            'PowerState/deallocated': 'stopped',
+            'PowerState/deallocating': 'stopping',
+            'PowerState/starting': 'starting',
+            'PowerState/stopping': 'stopping',
+            'PowerState/stopped': 'stopped',
+            'PowerState/unknown': 'unknown',
+            'Succeeded': 'running',
+            'Failed': 'error',
+            'Creating': 'creating',
+            'Deleting': 'deleting'
+        }
+        return status_mapping.get(azure_status, 'unknown')
+
     def list_instances(self):
-        instances = self.compute_client.virtual_machines.list(self.resource_group)
-        serialized_instances = [self.serialize_instance(instance) for instance in instances]
-        return serialized_instances
+        instances = self.compute_client.virtual_machines.list_all()
+        instances_details = []
+
+        for instance in instances:
+            instance_detail = self.compute_client.virtual_machines.get(
+                resource_group_name=instance.id.split('/')[4],  # Extract resource group name from instance ID
+                vm_name=instance.name,
+                expand=InstanceViewTypes.instance_view
+            )
+            instances_details.append(self.serialize_instance(instance_detail))
+
+        return instances_details
 
     def create_virtual_network(self, vnet_name, subnet_name):
         vnet_params = {
@@ -338,7 +497,7 @@ class AzureManager:
             'network_profile': {'network_interfaces': [{'id': nic_info.id, 'primary': True}]}
         }
         async_vm_creation = self.compute_client.virtual_machines.begin_create_or_update(self.resource_group, vm_name, params)
-        return async_vm_creation.result()
+        return self.serialize_instance(async_vm_creation.result())
 
     def get_instance_info(self, vm_name):
         vm = self.compute_client.virtual_machines.get(self.resource_group, vm_name)
@@ -488,20 +647,34 @@ class AzureManager:
         blob_client.delete_blob()
         return {"status": "deleted"}
 
+    def _get_blob_service_client(self, account_name):
+        account_url = f"https://{account_name}.blob.core.windows.net"
+        return BlobServiceClient(account_url=account_url, credential=settings.AZURE_STORAGE_ACCOUNT_KEY)
+
     def generate_presigned_url(self, account_name, container_name, blob_name, expiration=3600):
-        blob_service_client = self._get_blob_service_client(account_name)
-        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
-        sas_token_expiry = datetime.utcnow() + timedelta(seconds=expiration)
-        sas_token = generate_blob_sas(
-            account_name=blob_client.account_name,
-            container_name=container_name,
-            blob_name=blob_name,
-            account_key=settings.AZURE_STORAGE_ACCOUNT_KEY,
-            permission=BlobSasPermissions(read=True),
-            expiry=sas_token_expiry
-        )
-        sas_url = f"{blob_client.url}?{sas_token}"
-        return {"url": sas_url}
+        try:
+            blob_service_client = self._get_blob_service_client(account_name)
+            blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+
+            sas_token_expiry = datetime.utcnow() + timedelta(seconds=int(expiration))
+            logging.info(f"SAS token expiry time: {sas_token_expiry}")
+
+            sas_token = generate_blob_sas(
+                account_name=blob_client.account_name,
+                container_name=container_name,
+                blob_name=blob_name,
+                account_key=settings.AZURE_STORAGE_ACCOUNT_KEY,
+                permission=BlobSasPermissions(read=True),
+                expiry=sas_token_expiry
+            )
+
+            sas_url = f"{blob_client.url}?{sas_token}"
+            logging.info(f"Generated SAS URL: {sas_url}")
+
+            return sas_url
+        except Exception as e:
+            logging.error(f"Error generating presigned URL: {e}")
+            raise e
 
     def create_network_security_group(self, nsg_name, ports):
         security_rules = [
@@ -545,47 +718,10 @@ class AzureManager:
             "ip_address": ip_address
         }
 
-    def run_ssh_command(self, ip_address, command, ssh_key_path):
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        private_key = None
-        try:
-            private_key = paramiko.RSAKey.from_private_key_file(ssh_key_path)
-        except Exception as e:
-            logger.error(f"Failed to load private key: {e}")
-            return
-        attempts = 0
-        connected = False
-        while not connected and attempts < 5:
-            try:
-                logger.info(f"Attempting to connect to {ip_address} with key {ssh_key_path}")
-                ssh.connect(ip_address, username=self.os_username, pkey=private_key)
-                connected = True
-            except paramiko.AuthenticationException as auth_error:
-                logger.error(f"SSH authentication failed: {auth_error}")
-                attempts += 1
-                time.sleep(30)
-            except Exception as e:
-                logger.error(f"SSH connection failed: {e}")
-                attempts += 1
-                time.sleep(30)
-        if not connected:
-            raise Exception(f"Unable to connect to {ip_address} after multiple attempts")
-        stdin, stdout, stderr = ssh.exec_command(command)
-        stdout.channel.recv_exit_status()
-        output = stdout.read().decode()
-        error = stderr.read().decode()
-        ssh.close()
-        if output:
-            logger.info(f"Command output: {output}")
-        if error:
-            logger.error(f"Command error: {error}")
-        return output, error
-
     def install_docker(self, ip_address, ssh_private_key_path):
         commands = [
             'sudo apt-get update -y',
-            'sudo apt-get install -y docker.io',
+            'sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io',
             'sudo systemctl start docker',
             f'sudo usermod -a -G docker {self.os_username}'
         ]
@@ -646,6 +782,17 @@ class AzureManager:
         else:
             response.raise_for_status()
 
-    def _get_blob_service_client(self, account_name):
-        account_key = self.storage_client.storage_accounts.list_keys(self.resource_group, account_name).keys[0].value
-        return BlobServiceClient(account_url=f"https://{account_name}.blob.core.windows.net", credential=account_key)
+    def create_deploy_and_get_ip(self, cluster_name, image_name, service_name, container_port):
+        insecure_registry = "{settings.NEXUS_REGISTRY_URL}:{settings.NEXUS_REGISTRY_DOCKER_PORT}"
+        response = self.deploy_and_create_cluster(
+            cluster_name=cluster_name,
+            image_name=image_name,
+            service_name=service_name,
+            container_port=container_port,
+            insecure_registry=insecure_registry
+
+        )
+        cluster = response["cluster"]
+        kubeconfig_path = response["kubeconfig_path"]
+        external_ip = self.get_service_external_ip(kubeconfig_path)
+        return {"external_ip": external_ip, "cluster": cluster}

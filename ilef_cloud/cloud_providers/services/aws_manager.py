@@ -8,6 +8,15 @@ import os
 import yaml
 import time
 
+AWS_STATUS_MAP = {
+    'pending': 'pending',
+    'running': 'running',
+    'shutting-down': 'terminated',
+    'terminated': 'terminated',
+    'stopping': 'stopped',
+    'stopped': 'stopped'
+}
+
 
 class AWSManager(BaseCloudManager):
     def __init__(self):
@@ -129,44 +138,44 @@ class AWSManager(BaseCloudManager):
 
         return default_vpc_id, subnet_ids
 
-    def create_cluster(self, cluster_name, nodegroup_name, nodegroup_size, instance_types):
-        vpc_id, subnet_ids = self.get_default_vpc_and_subnets()
-        security_group_id = self.create_security_group(cluster_name, vpc_id)
+    # def create_cluster(self, cluster_name, nodegroup_name, nodegroup_size, instance_types):
+    #     vpc_id, subnet_ids = self.get_default_vpc_and_subnets()
+    #     security_group_id = self.create_security_group(cluster_name, vpc_id)
 
-        cluster = self.eks_client.create_cluster(
-            name=cluster_name,
-            version='1.23',  # Specify the latest supported version as needed
-            roleArn=self.eks_cluster_role_arn,
-            resourcesVpcConfig={
-                'subnetIds': subnet_ids,
-                'securityGroupIds': [security_group_id],
-                'endpointPublicAccess': True
-            }
-        )
+    #     cluster = self.eks_client.create_cluster(
+    #         name=cluster_name,
+    #         version='1.23',  # Specify the latest supported version as needed
+    #         roleArn=self.eks_cluster_role_arn,
+    #         resourcesVpcConfig={
+    #             'subnetIds': subnet_ids,
+    #             'securityGroupIds': [security_group_id],
+    #             'endpointPublicAccess': True
+    #         }
+    #     )
 
-        waiter = self.eks_client.get_waiter('cluster_active')
-        waiter.wait(name=cluster_name)
+    #     waiter = self.eks_client.get_waiter('cluster_active')
+    #     waiter.wait(name=cluster_name)
 
-        nodegroup = self.create_nodegroup(cluster_name, nodegroup_name, nodegroup_size, subnet_ids, instance_types)
-        return {"cluster": cluster, "nodegroup": nodegroup}
+    #     nodegroup = self.create_nodegroup(cluster_name, nodegroup_name, nodegroup_size, subnet_ids, instance_types)
+    #     return {"cluster": cluster, "nodegroup": nodegroup}
 
-    def create_security_group(self, cluster_name, vpc_id):
-        response = self.ec2_client.create_security_group(
-            GroupName=f'{cluster_name}-sg',
-            Description='EKS cluster security group',
-            VpcId=vpc_id
-        )
-        security_group_id = response['GroupId']
-        self.ec2_client.authorize_security_group_ingress(
-            GroupId=security_group_id,
-            IpPermissions=[
-                {
-                    'IpProtocol': '-1',
-                    'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
-                }
-            ]
-        )
-        return security_group_id
+    # def create_security_group(self, cluster_name, vpc_id):
+    #     response = self.ec2_client.create_security_group(
+    #         GroupName=f'{cluster_name}-sg',
+    #         Description='EKS cluster security group',
+    #         VpcId=vpc_id
+    #     )
+    #     security_group_id = response['GroupId']
+    #     self.ec2_client.authorize_security_group_ingress(
+    #         GroupId=security_group_id,
+    #         IpPermissions=[
+    #             {
+    #                 'IpProtocol': '-1',
+    #                 'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+    #             }
+    #         ]
+    #     )
+    #     return security_group_id
 
     def create_nodegroup(self, cluster_name, nodegroup_name, nodegroup_size, subnet_ids, instance_types):
         nodegroup = self.eks_client.create_nodegroup(
@@ -253,15 +262,17 @@ class AWSManager(BaseCloudManager):
         return response.get(key, [])
 
     def serialize_instance(self, instance):
+        print(instance)
         return {
-            "id": instance['InstanceId'],
+            "provider": "aws",
+            "id": instance.get('InstanceId') or instance.get('id'),
             "name": instance['Tags'][0]['Value'] if 'Tags' in instance and instance['Tags'] else "Unnamed",
-            "status": instance['State']['Name'],
-            "creation_timestamp": instance['LaunchTime'].strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-            "zone": instance['Placement']['AvailabilityZone'],
-            "machine_type": instance['InstanceType'],
-            "network_ip": instance['PrivateIpAddress'],
-            "external_ip": instance['PublicIpAddress'] if 'PublicIpAddress' in instance else None
+            "status": AWS_STATUS_MAP.get(instance.get('State', {}).get('Name') or instance.get('status')),
+            "created_at": instance['LaunchTime'].strftime("%Y-%m-%dT%H:%M:%S.%fZ") if 'LaunchTime' in instance else instance.get('creation_timestamp'),
+            "zone": instance['Placement']['AvailabilityZone'] if 'Placement' in instance else instance['zone'],
+            "machine_type": instance['InstanceType'] if 'InstanceType' in instance else instance['machine_type'],
+            "network_ip": instance['PrivateIpAddress'] if 'PrivateIpAddress' in instance else instance.get('network_ip'),
+            "external_ip": instance['PublicIpAddress'] if 'PublicIpAddress' in instance else instance.get('external_ip'),
         }
 
     def list_instances(self):
@@ -276,13 +287,14 @@ class AWSManager(BaseCloudManager):
         method = getattr(self.ec2, action)
         return method(InstanceIds=[instance_id])
 
-    def create_instance(self, instance_type, key_name, min_count=1, max_count=1, image_id=None, security_group_id=None):
+    def create_instance(self, instance_name, instance_type, key_name, min_count=1, max_count=1, image_id=None, security_group_id=None):
         if image_id is None:
             default_ami_ids = {
-                'us-east-1': 'ami-0bb84b8ffd87024d8',
+                'us-east-1': 'ami-04a81a99f5ec58529',
                 'us-west-2': 'ami-0de53d8956e8dcf80',
             }
             image_id = default_ami_ids.get(settings.AWS_REGION)
+            print(f'image_id=> {image_id}')
             if not image_id:
                 raise ValueError(f"No default Ubuntu 22.04 AMI ID found for region {settings.AWS_REGION}")
 
@@ -294,6 +306,12 @@ class AWSManager(BaseCloudManager):
             MaxCount=max_count,
             SecurityGroupIds=[security_group_id] if security_group_id else []
         )
+
+        instance_id = response['Instances'][0]['InstanceId']
+
+        # Add tag with the instance name
+        self.ec2.create_tags(Resources=[instance_id], Tags=[{'Key': 'Name', 'Value': instance_name}])
+
         return response
 
     def list_key_pairs(self):
@@ -333,13 +351,13 @@ class AWSManager(BaseCloudManager):
             ExpiresIn=expiration
         )
 
-    # def create_security_group(self, group_name, description, vpc_id):
-    #     response = self.ec2.create_security_group(
-    #         GroupName=group_name,
-    #         Description=description,
-    #         VpcId=vpc_id
-    #     )
-    #     return response['GroupId']
+    def create_security_group(self, group_name, description, vpc_id):
+        response = self.ec2.create_security_group(
+            GroupName=group_name,
+            Description=description,
+            VpcId=vpc_id
+        )
+        return response['GroupId']
 
     def authorize_security_group_ingress(self, group_id, ports):
         ip_permissions = [
@@ -356,7 +374,7 @@ class AWSManager(BaseCloudManager):
             IpPermissions=ip_permissions
         )
 
-    def create_docker_image_server(self, image_id, instance_type, key_name, image, ssh_private_key, min_count=1, max_count=1):
+    def create_docker_image_server(self, image_id, instance_name, instance_type, key_name, image, ssh_private_key, min_count=1, max_count=1):
         vpc_id = self.ec2.describe_vpcs()['Vpcs'][0]['VpcId']
         generated_code = get_random_string(3)
         security_group_id = self.create_security_group(
@@ -364,7 +382,7 @@ class AWSManager(BaseCloudManager):
         ports = inspect_image(image)
         self.authorize_security_group_ingress(security_group_id, ports + [22, 80])
 
-        response = self.create_instance(instance_type, key_name, min_count, max_count, image_id, security_group_id)
+        response = self.create_instance(instance_name, instance_type, key_name, min_count, max_count, image_id, security_group_id)
         instance_id = response['Instances'][0]['InstanceId']
 
         self.ec2.get_waiter('instance_running').wait(InstanceIds=[instance_id])

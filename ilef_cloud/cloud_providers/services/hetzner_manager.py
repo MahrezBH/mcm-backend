@@ -9,6 +9,12 @@ from cloud_providers.services.base import *
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+HETZNER_STATUS_MAP = {
+    'running': 'running',
+    'initializing': 'pending',
+    'off': 'stopped'
+}
+
 
 class HetznerManager(BaseCloudManager):
     def __init__(self, os_username="root"):
@@ -18,10 +24,11 @@ class HetznerManager(BaseCloudManager):
 
     def serialize_instance(self, instance):
         return {
+            "provider": "hetzner",
             "id": instance['id'],
             "name": instance['name'],
-            "status": instance['status'],
-            "creation_timestamp": instance['created'],
+            "status": HETZNER_STATUS_MAP.get(instance['status'], 'Unknown'),
+            "created_at": instance['created'],
             "zone": instance['datacenter']['name'],
             "machine_type": instance['server_type']['name'],
             "network_ip": instance['private_net'][0]['ip'] if instance['private_net'] else None,
@@ -40,6 +47,7 @@ class HetznerManager(BaseCloudManager):
             data["ssh_keys"] = [ssh_key_id]
         logger.info(f"Creating instance with data: {data}")
         response = requests.post(f'{self.api_url}/servers', headers=self.headers, json=data)
+        print(response.json())
         response.raise_for_status()
         return response.json()
 
