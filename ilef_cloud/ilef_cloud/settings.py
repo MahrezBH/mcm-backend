@@ -49,7 +49,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # See https://docs.djangoproject.com/en/1.7/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'uw7s_r-tt(w8#bp&c5t%jr$c4wd*0ql+x=xw4=gv2d)qz#+_l('
+SECRET_KEY = vault_secrets.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -168,11 +168,6 @@ LOGGING = {
         },
     },
     'loggers': {
-        # 'django': {
-        #     'handlers': ['console', 'file'],
-        #     'level': 'DEBUG',
-        #     'propagate': True,
-        # },
         'django.request': {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
@@ -201,12 +196,11 @@ SIMPLE_JWT = {
 }
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
+    "http://37.27.185.86:4200/"
 ]
+# CORS_ALLOW_ALL_ORIGINS = True # to allow all orings
 SSH_PRIVATE_KEY = vault_secrets.get('SSH_PRIVATE_KEY')
-# SSH_PRIVATE_KEY_PATH = '/home/mahrezbh/.ssh/id_rsa'
-# SSH_ILEF_PRIVATE_KEY_PATH = '/home/mahrezbh/Desktop/pfe/Workspace/ilef_cloud/cloud_providers/services/ilef.pem'
 SSH_PUBLIC_KEY = vault_secrets.get('SSH_PUBLIC_KEY')
-# SSH_PUBLIC_KEY_PATH = '/home/mahrezbh/.ssh/id_rsa.pub'
 
 # AZURE Configuration
 AZURE_TENANT_ID = vault_secrets.get('AZURE_TENANT_ID')
@@ -216,15 +210,14 @@ AZURE_SUBSCRIPTION_ID = vault_secrets.get('AZURE_SUBSCRIPTION_ID')
 AZURE_RESOURCE_GROUP = vault_secrets.get('AZURE_RESOURCE_GROUP')
 AZURE_LOCATION = vault_secrets.get('AZURE_LOCATION')
 AZURE_STORAGE_CONNECTION_STRING = vault_secrets.get('AZURE_STORAGE_CONNECTION_STRING')
-# AZURE_STORAGE_ACCOUNT_KEY = vault_secrets.get('AZURE_STORAGE_ACCOUNT_KEY')
-AZURE_STORAGE_ACCOUNT_KEY = "rewWu9eWcdICn0+ptVRD5maPRrp6CpmwBmk6/NZPhM0h5EsslNp/yGLdq6Dp0rRPtGo80+XLdR6d+AStL6FW4w=="
-AZURE_DEFAULT_BUCKET = "ilef16"
+AZURE_STORAGE_ACCOUNT_KEY = vault_secrets.get('AZURE_STORAGE_ACCOUNT_KEY')
+AZURE_DEFAULT_BUCKET = vault_secrets.get('AZURE_DEFAULT_BUCKET')
 
 # AWS Configuration
 AWS_ACCESS_KEY_ID = vault_secrets.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = vault_secrets.get('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = vault_secrets.get('AWS_REGION')
-# AWS_SSH_PRIVATE_KEY = vault_secrets.get('AWS_SSH_PRIVATE_KEY')
+AWS_SSH_PRIVATE_KEY = vault_secrets.get('AWS_SSH_PRIVATE_KEY')
 AWS_SSH_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
 MIIEowIBAAKCAQEAgvuoejbdUygRMA1bSxLJgWrPxAx30y/0xvqCh2WxM79enbUy
 Xv7j3dArtFryEtrXHqx42iMvc5AW3j8yhdYDn0/4ArHC9XXMFBF6Ji/Ii6GXj+nk
@@ -255,16 +248,14 @@ MNMQqeLxLa/9jU0K/4Kry+ZHQB41rDNqIDjQQIUu+xSd9/bJ71gWuzt9O6wWtV1Y
 
 AWS_EKS_CLUSTER_ROLE_ARN = None
 AWS_EKS_NODE_ROLE_ARN = None
-AWS_DEFAULT_KEY_NAME = 'ilef'
-AWS_DEFAULT_BUCKET = 'mahrezbenhamad'
-# AWS_SSH_PRIVATE_KEY_PATH = '/home/mahrezbh/Desktop/pfe/Workspace/ilef_cloud/cloud_providers/services/ilef.pem'
+AWS_DEFAULT_KEY_NAME = vault_secrets.get('AWS_DEFAULT_KEY_NAME')
+AWS_DEFAULT_BUCKET = vault_secrets.get('AWS_DEFAULT_BUCKET')
 
 # GCP Configuration
 GCP_PROJECT_ID = vault_secrets.get('GCP_PROJECT_ID')
 GCP_ZONE = vault_secrets.get('GCP_ZONE')
 GCP_BILLING_ACCOUNT_ID = vault_secrets.get('GCP_BILLING_ACCOUNT_ID')
-# GCP_SERVICE_ACCOUNT_FILE = '/home/mahrezbh/Desktop/pfe/Workspace/backend/ilef_cloud/cloud_providers/services/ilef-cloud-fcc0cf91f94b.json'
-GCP_DEFAULT_BUCKET = 'mahrezbenhamad'
+GCP_DEFAULT_BUCKET = vault_secrets.get('GCP_DEFAULT_BUCKET')
 GCP_SERVICE_ACCOUNT_INFO = {
     "type": "service_account",
     "project_id": "ilef-cloud",
@@ -282,7 +273,7 @@ GCP_SERVICE_ACCOUNT_INFO = {
 
 # Hetzner configuration
 HETZNER_API_TOKEN = vault_secrets.get('HETZNER_API_TOKEN')
-HETZNER_DEFAULT_KEY_NAME = "ilef_ssh_key"
+HETZNER_DEFAULT_KEY_NAME = vault_secrets.get('HETZNER_DEFAULT_KEY_NAME')
 
 NEXUS_REGISTRY_URL = vault_secrets.get('NEXUS_REGISTRY_URL')
 NEXUS_REGISTRY_DEFAULT_PORT = vault_secrets.get('NEXUS_REGISTRY_DEFAULT_PORT')
