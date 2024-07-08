@@ -6,26 +6,38 @@ pipeline {
         SERVER_USER = 'root'
         GIT_REPO = 'git@github.com:MahrezBH/mcm-backend.git'
         BACKEND_DIR = '/root/mcm-backend'
+        NEXUS_URL = 'http://37.27.10.145:8081'
+        NEXUS_REPO = 'ilef'
+        NEXUS_CREDENTIALS_ID = 'nexus-credentials'
+        DOCKER_IMAGE = 'mcm-backend'
+        DOCKER_TAG = 'latest'
     }
 
     stages {
         stage('Checkout') {
             steps {
+                echo 'Checking out code...'
                 git url: "${GIT_REPO}", branch: 'main'
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                echo 'Building...'
-                // Add your build steps here
+                echo 'Building Docker image...'
+                script {
+                    dockerImage = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                }
             }
         }
 
-        stage('Test') {
+        stage('Push to Nexus') {
             steps {
-                echo 'Testing...'
-                // Add your test steps here
+                echo 'Pushing Docker image to Nexus...'
+                script {
+                    withDockerRegistry([ credentialsId: "${NEXUS_CREDENTIALS_ID}", url: "${NEXUS_URL}" ]) {
+                        dockerImage.push()
+                    }
+                }
             }
         }
 
