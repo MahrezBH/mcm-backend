@@ -27,6 +27,8 @@ pipeline {
                 script {
                     sshagent (credentials: ['APP-JENKINS-SSH']) {
                         sh """
+                        ssh-keygen -R ${SERVER_IP}
+                        ssh-keyscan -H ${SERVER_IP} >> ~/.ssh/known_hosts
                         ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                             if [ ! -f ${VERSION_FILE} ]; then echo "0" > ${VERSION_FILE}; fi
                             version=\$(cat ${VERSION_FILE})
@@ -67,6 +69,8 @@ pipeline {
                 echo 'Deploying...'
                 sshagent (credentials: ['APP-JENKINS-SSH']) {
                     sh """
+                    ssh-keygen -R ${SERVER_IP}
+                    ssh-keyscan -H ${SERVER_IP} >> ~/.ssh/known_hosts
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
                         git pull
@@ -75,11 +79,14 @@ pipeline {
                 }
             }
         }
-         stage('SonarQube Analysis') {
+        
+        stage('SonarQube Analysis') {
             steps {
                 echo 'SonarQube Analysis...'
                 sshagent (credentials: ['APP-JENKINS-SSH']) {
                     sh """
+                    ssh-keygen -R ${SERVER_IP}
+                    ssh-keyscan -H ${SERVER_IP} >> ~/.ssh/known_hosts
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
                         /opt/sonar-scanner/bin/sonar-scanner
