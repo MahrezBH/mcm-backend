@@ -10,7 +10,7 @@ pipeline {
         NEXUS_REPO = 'ilef'
         NEXUS_CREDENTIALS_ID = 'nexus-credentials'
         DOCKER_IMAGE = 'mcm-backend'
-        VERSION_FILE = 'version.txt'
+        VERSION_FILE = '/root/version.txt'
         DOCKERFILE_DIR = 'ilef_cloud'
     }
 
@@ -22,27 +22,22 @@ pipeline {
             }
         }
 
-        stage('Read Version') {
+        stage('Read and Update Version') {
             steps {
                 script {
-                    def version = readFile("${VERSION_FILE}").trim()
-                    def newVersion = version.toInteger() + 1
-                    env.DOCKER_TAG = newVersion.toString()
-                    writeFile file: "${VERSION_FILE}", text: env.DOCKER_TAG
-                    echo "New Docker tag: ${env.DOCKER_TAG}"
-                }
-            }
-        }
-
-        stage('Commit New Version') {
-            steps {
-                script {
-                    echo "Configuring Git..."
-                    sh 'git config user.email "mahrez.benhamad@gmail.com"'
-                    sh 'git config user.name "MahrezBH"'
-                    sh 'git add ${VERSION_FILE}'
-                    sh 'git commit -m "Increment version to ${DOCKER_TAG}" || echo "No changes to commit"'
-                    sh 'git push origin main || echo "Nothing to push"'
+                    sshagent (credentials: ['APP-JENKINS-SSH']) {
+                        sh """
+                        ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
+                            if [ ! -f ${VERSION_FILE} ]; then echo "0" > ${VERSION_FILE}; fi
+                            version=\$(cat ${VERSION_FILE})
+                            newVersion=\$((version + 1))
+                            echo \$newVersion > ${VERSION_FILE}
+                        '
+                        """
+                        def newVersion = sh(script: "ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} 'cat ${VERSION_FILE}'", returnStdout: true).trim()
+                        env.DOCKER_TAG = newVersion
+                        echo "New Docker tag: ${env.DOCKER_TAG}"
+                    }
                 }
             }
         }
@@ -74,7 +69,8 @@ pipeline {
                     sh """
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
-                        git pull
+                        git pull ${GIT_REPO} main
+                        /root/restart-backend.sh
                     '
                     """
                 }
