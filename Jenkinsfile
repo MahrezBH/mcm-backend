@@ -17,9 +17,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out code...'
-                sshagent (credentials: ['MahrezBH-GITHUB']) {
-                    sh 'git clone ${GIT_REPO} ${BACKEND_DIR}'
-                }
+                git url: "${GIT_REPO}", branch: 'main'
             }
         }
 
@@ -35,26 +33,26 @@ pipeline {
         stage('Push to Nexus') {
             steps {
                 echo 'Pushing Docker image to Nexus...'
-                // script {
-                //     withDockerRegistry([ credentialsId: "${NEXUS_CREDENTIALS_ID}", url: "${NEXUS_URL}" ]) {
-                //         dockerImage.push()
-                //     }
-                // }
+                script {
+                    withDockerRegistry([ credentialsId: "${NEXUS_CREDENTIALS_ID}", url: "${NEXUS_URL}" ]) {
+                        dockerImage.push()
+                    }
+                }
             }
         }
 
         stage('Deploy') {
             steps {
                 echo 'Deploying...'
-                // sshagent (credentials: ['MahrezBH-JENKINS-SSH']) {
-                //     sh """
-                //     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
-                //         cd ${BACKEND_DIR}
-                //         git pull ${GIT_REPO} main
-                //         /root/restart-backend.sh
-                //     '
-                //     """
-                // }
+                sshagent (credentials: ['MahrezBH-JENKINS-SSH']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
+                        cd ${BACKEND_DIR}
+                        git pull ${GIT_REPO} main
+                        /root/restart-backend.sh
+                    '
+                    """
+                }
             }
         }
     }
