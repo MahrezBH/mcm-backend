@@ -2,15 +2,16 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP = '37.27.185.86'
+        SERVER_IP = '65.21.108.31'
         SERVER_USER = 'root'
         GIT_REPO = 'git@github.com:MahrezBH/mcm-backend.git'
         BACKEND_DIR = '/root/mcm-backend'
-        NEXUS_URL = 'http://37.27.10.145:8081'
+        NEXUS_URL = 'http://37.27.4.176:8081'
         NEXUS_REPO = 'ilef'
         NEXUS_CREDENTIALS_ID = 'nexus-credentials'
         DOCKER_IMAGE = 'mcm-backend'
-        DOCKER_TAG = 'latest'
+        VERSION_FILE = 'version.txt'
+        DOCKERFILE_DIR = 'ilef_cloud'
     }
 
     stages {
@@ -21,11 +22,35 @@ pipeline {
             }
         }
 
+        stage('Read Version') {
+            steps {
+                script {
+                    def version = readFile("${VERSION_FILE}").trim()
+                    def newVersion = version.toInteger() + 1
+                    env.DOCKER_TAG = newVersion.toString()
+                    writeFile file: "${VERSION_FILE}", text: env.DOCKER_TAG
+                    echo "New Docker tag: ${env.DOCKER_TAG}"
+                }
+            }
+        }
+
+        stage('Commit New Version') {
+            steps {
+                script {
+                    sh 'git config user.email "jenkins@jenkins.com"'
+                    sh 'git config user.name "Jenkins"'
+                    sh 'git add ${VERSION_FILE}'
+                    sh 'git commit -m "Increment version to ${env.DOCKER_TAG}"'
+                    sh 'git push origin main'
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image...'
                 script {
-                    dockerImage = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                    dockerImage = docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}", "-f ${DOCKERFILE_DIR}/Dockerfile .")
                 }
             }
         }
@@ -34,7 +59,7 @@ pipeline {
             steps {
                 echo 'Pushing Docker image to Nexus...'
                 script {
-                    withDockerRegistry([ credentialsId: "${NEXUS_CREDENTIALS_ID}", url: "${NEXUS_URL}" ]) {
+                    docker.withRegistry("${NEXUS_URL}", "${NEXUS_CREDENTIALS_ID}") {
                         dockerImage.push()
                     }
                 }
@@ -44,7 +69,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 echo 'Deploying...'
-                sshagent (credentials: ['MahrezBH-JENKINS-SSH']) {
+                sshagent (credentials: ['APP-JENKINS-SSH']) {
                     sh """
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
