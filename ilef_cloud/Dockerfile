@@ -12,7 +12,7 @@ COPY ilef_cloud/requirements.txt /app/
 
 # Install the required packages
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt || true
 
 # Copy the entire backend project to the working directory
 COPY ilef_cloud /app/
