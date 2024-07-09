@@ -196,7 +196,7 @@ SIMPLE_JWT = {
 }
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
-    "http://37.27.185.86:4200"
+    "http://65.21.108.31:4200"
 ]
 # CORS_ALLOW_ALL_ORIGINS = True # to allow all orings
 SSH_PRIVATE_KEY = vault_secrets.get('SSH_PRIVATE_KEY')
