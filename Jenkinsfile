@@ -17,7 +17,9 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out code...'
-                git url: "${GIT_REPO}", branch: 'main'
+                sshagent (credentials: ['MahrezBH-GITHUB']) {
+                    sh 'git clone ${GIT_REPO} ${BACKEND_DIR}'
+                }
             }
         }
 
