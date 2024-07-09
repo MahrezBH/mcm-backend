@@ -74,7 +74,7 @@ pipeline {
                     sh """
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
-                        git pull ${GIT_REPO} main
+                        git pull
                     '
                     """
                 }
