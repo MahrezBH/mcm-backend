@@ -22,7 +22,7 @@ pipeline {
             }
         }
 
-        stage('Read and Update Version') {
+        stage('Read and Update Tag Version') {
             steps {
                 script {
                     sshagent (credentials: ['APP-JENKINS-SSH']) {
@@ -51,7 +51,7 @@ pipeline {
             }
         }
 
-        stage('Push to Nexus') {
+        stage('Push to Nexus Server') {
             steps {
                 echo 'Pushing Docker image to Nexus...'
                 script {
@@ -62,7 +62,7 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Project Server') {
             steps {
                 echo 'Deploying...'
                 sshagent (credentials: ['APP-JENKINS-SSH']) {
