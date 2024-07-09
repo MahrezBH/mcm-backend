@@ -75,7 +75,6 @@ pipeline {
                     ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
                         cd ${BACKEND_DIR}
                         git pull ${GIT_REPO} main
-                        /root/restart-backend.sh
                     '
                     """
                 }
