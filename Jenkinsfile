@@ -80,6 +80,19 @@ pipeline {
                 }
             }
         }
+         stage('SonarQube Analysis') {
+            steps {
+                echo 'SonarQube Analysis...'
+                sshagent (credentials: ['APP-JENKINS-SSH']) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} '
+                        cd ${BACKEND_DIR}
+                        /opt/sonar-scanner/bin/sonar-scanner
+                    '
+                    """
+                }
+            }
+        }
     }
 
     post {
