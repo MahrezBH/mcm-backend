@@ -1,9 +1,10 @@
 from datetime import timedelta
 import os
 import hvac
+from decouple import config
 
 # Vault configuration
-VAULT_ADDR = 'http://37.27.4.176:8200'  # Replace with your Vault server address
+VAULT_ADDR = config('VAULT_ADDR')  # Replace with your Vault server address
 VAULT_TOKEN = os.getenv('VAULT_TOKEN')  # Securely get the Vault token from environment variables
 VAULT_SECRET_PATH = 'ilef/myapp'  # Correct path without trailing slash
 
