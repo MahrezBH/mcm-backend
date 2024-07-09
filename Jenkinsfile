@@ -6,7 +6,7 @@ pipeline {
         SERVER_USER = 'root'
         GIT_REPO = 'git@github.com:MahrezBH/mcm-backend.git'
         BACKEND_DIR = '/root/mcm-backend'
-        NEXUS_URL = 'http://37.27.4.176:8081'
+        NEXUS_URL = 'http://37.27.4.176:8082/ilef/'
         NEXUS_REPO = 'ilef'
         NEXUS_CREDENTIALS_ID = 'nexus-credentials'
         DOCKER_IMAGE = 'mcm-backend'
