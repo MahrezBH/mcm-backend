@@ -37,11 +37,12 @@ pipeline {
         stage('Commit New Version') {
             steps {
                 script {
-                    sh 'git config user.email "jenkins@jenkins.com"'
-                    sh 'git config user.name "Jenkins"'
+                    echo "Configuring Git..."
+                    sh 'git config user.email "mahrez.benhamad@gmail.com"'
+                    sh 'git config user.name "MahrezBH"'
                     sh 'git add ${VERSION_FILE}'
-                    sh 'git commit -m "Increment version to ${env.DOCKER_TAG}"'
-                    sh 'git push origin main'
+                    sh 'git commit -m "Increment version to ${DOCKER_TAG}" || echo "No changes to commit"'
+                    sh 'git push origin main || echo "Nothing to push"'
                 }
             }
         }
