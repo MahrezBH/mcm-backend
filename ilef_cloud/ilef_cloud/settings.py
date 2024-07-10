@@ -199,6 +199,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:4200",
     config('FRONT_ADDR')
 ]
+
+# DOCKERHUB ACCOUNT CERDS
+DOCKER_HUB_USERNAME = vault_secrets.get('DOCKER_HUB_USERNAME')
+DOCKER_HUB_PASSWORD = vault_secrets.get('DOCKER_HUB_PASSWORD')
+
 # CORS_ALLOW_ALL_ORIGINS = True # to allow all orings
 SSH_PRIVATE_KEY = vault_secrets.get('SSH_PRIVATE_KEY')
 SSH_PUBLIC_KEY = vault_secrets.get('SSH_PUBLIC_KEY')
