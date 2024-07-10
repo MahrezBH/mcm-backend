@@ -22,7 +22,15 @@ def inspect_image(image, username=settings.NEXUS_REGISTRY_USERNAME, password=set
             'password': password
         }
         image_info = client.images.pull(image, auth_config=auth_config).attrs
-
+    except Exception as exception:
+        # If the image is not found, pull it from the remote registry with authentication
+        print(f'[error][inspect_image]: {exception}')
+        print(f"Image {image} not found locally. Pulling from your dockerhub registry...")
+        auth_config = {
+            'username': settings.DOCKER_HUB_USERNAME,
+            'password': settings.DOCKER_HUB_PASSWORD
+        }
+        image_info = client.images.pull(image, auth_config=auth_config).attrs
     ports = image_info.get('Config', {}).get('ExposedPorts', {})
     return [int(port.split('/')[0]) for port in ports]
 
