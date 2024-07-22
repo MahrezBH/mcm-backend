@@ -106,3 +106,6 @@ class BaseCloudManager:
 
     def manage_file(self, action, *args, **kwargs):
         raise NotImplementedError("This method should be overridden in the subclass.")
+
+    def manage_container(self, action, *args, **kwargs):
+        raise NotImplementedError("This method should be overridden in the subclass.")
