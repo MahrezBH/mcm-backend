@@ -10,7 +10,7 @@ from django.conf import settings
 
 def inspect_image(image, username=settings.NEXUS_REGISTRY_USERNAME, password=settings.NEXUS_REGISTRY_PASSWORD):
     client = docker.from_env()
-
+    print('new change')
     try:
         # Try to get the image locally
         image_info = client.images.get(image).attrs
