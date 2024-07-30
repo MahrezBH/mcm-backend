@@ -224,33 +224,6 @@ AWS_ACCESS_KEY_ID = vault_secrets.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = vault_secrets.get('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = vault_secrets.get('AWS_REGION')
 AWS_SSH_PRIVATE_KEY = vault_secrets.get('AWS_SSH_PRIVATE_KEY')
-AWS_SSH_PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAgvuoejbdUygRMA1bSxLJgWrPxAx30y/0xvqCh2WxM79enbUy
-Xv7j3dArtFryEtrXHqx42iMvc5AW3j8yhdYDn0/4ArHC9XXMFBF6Ji/Ii6GXj+nk
-V6pWJ9wEngNX/lV6uq4HcTvgF5+zRPVNzQzigIJDrhUvwKYO1NlFxRiT7OYK77CC
-xkdIgwdV0j+AFm+tLz7YMAnSfhR3I6Wmk+g8HoC8ThMeSCrG906B3/OnbjLI6zSM
-03SfQ1zmLMMYM8gMbSA6a3vDRw8avRGPMHReRHR3hqkgJiRZF3wWFOXh24PaV1EZ
-nT1WZfiikWze1KPdcTaa/8QMkKRyE/avOWhVfQIDAQABAoIBAARQpBE6o3ns1Pwf
-RIWpncfMrAGKY5wqdUbk084AFKFeyZAqevlULk+NXxM298iVOwcAqY6OIC8PbSFv
-NYvhLAdgjAwSrRiHA+0ZUkvVwSaQcTzFeMdGjkYL4n8OHyT6zes+dnJNhalhkndQ
-GXsK1J9lKzOd8Q/IqK5sZfcDQ0RHl6xEgh7wgdZ4cCwJlE1IoPhvaqL73fJq7P6c
-KVbqbfQu0ywVYzJR+QlflHpNt9D6OWG9T6b388D9Q8BLP8FoFKX0TTyW6wKlnEwS
-LyA8OrWJCCRFDX+feHQRviyq2Q3d330r9lPhS/sUInVg7QxI9bNqTde8UK9MtG6p
-aWAWW8UCgYEAy84Vrj8YMlK7ZGaMLub9guigUHwkfkChx/Dy2cnmO3RJ6cB1Twmb
-jDz1IyX4vYds4Y/IoPBfCjZuCfUrAqWH9sHUoe9lb0+66Mp3j8WSnjyqCbetu5lV
-toGwW3B88zvOPP177ewJTGEJhDQo4wZbBpU2Vl4jtB/HyKCRb1fineMCgYEApIcz
-Y1seZOyO+rtK7qrFQUWBlvOCkMwbXY5WUZUIa8hbqB1hL3Erld6tkyZVQJ1fDtir
-55XSQ/QHypog6Xy4jHm8z4QDZ1hd7L0RYLdwKdNpeWSZPdCihEjv3XRENRcfGlJt
-enGS6hQZB6fr1T6Sl/iTn89CJflpjxWA/cbBnR8CgYEAq8yccBcVwY4GE1tyfjMP
-ruOECHStmpPHDLFrNfXBE4syp04qVScHLU9RYYCnzrSzLu0ytaAKraQ2XESELiX1
-mCfKo3sXaZ6vM39BDDwDHUqMF8bzN7nJDCEE1f/cBHn8n2MarfQT3oPKLtx9Purj
-nof3lxSiSjukANaB4ncWO/sCgYAiax429MLg/hPTJAdC8nqdcvrvJzXzMJ+w7Kvm
-GTVPxvRVsP+5uwURLypElEpVYBaYtn8PzWnVSWGv4ppr/elliboT91v27KeJdOwD
-vZw7Q7zW5lKgedrlrZRwUXhLWvDowsGgUc4YJeguj9RoIdTs8dWAIw2FgC2y/x6i
-+EdcpQKBgHtNECELZK/sRvBIz/rONT+UfkRLIwUzw/SP0dmvr37rlWhpG6Wd3QL4
-MNMQqeLxLa/9jU0K/4Kry+ZHQB41rDNqIDjQQIUu+xSd9/bJ71gWuzt9O6wWtV1Y
-/PKcgf6qhT3bDsFt28ExhJcfFiZVK7n1a17nn9tZWZTaVOTIEC3g
------END RSA PRIVATE KEY-----"""
 
 AWS_EKS_CLUSTER_ROLE_ARN = None
 AWS_EKS_NODE_ROLE_ARN = None
@@ -262,20 +235,7 @@ GCP_PROJECT_ID = vault_secrets.get('GCP_PROJECT_ID')
 GCP_ZONE = vault_secrets.get('GCP_ZONE')
 GCP_BILLING_ACCOUNT_ID = vault_secrets.get('GCP_BILLING_ACCOUNT_ID')
 GCP_DEFAULT_BUCKET = vault_secrets.get('GCP_DEFAULT_BUCKET')
-GCP_SERVICE_ACCOUNT_INFO = {
-    "type": "service_account",
-    "project_id": "ilef-cloud",
-    "private_key_id": "fcc0cf91f94b3f681c5862322f81d3cda501fe29",
-    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDflelx6dX/lVGa\nn1Pg1/xFJl9PaucJrbEkWq7L/GwhNxVrgSfvEsa6LO+FLCIEc4LQCm6BDcHUQE1E\nbDX9qhK/XGubbs1oPLHi2KpJ/YWvHlyurazzuU67uNY6Wxphfbmfmcc4rTaffmYh\njEJ39GlrZX114z/NFj34KxQ0fklpHvFg8dfPoU9VHtpAF/Vy1MqGdzFfxXbALB0k\nWjS81d0WgbQFuMYQSmgN/6e5W6el4eIo5LUQfVY0+xX3szrVLsK6kILues37DH4Y\nuxswTiC6dVz7RfRl8GQ9MXc7glaJOHls0ZCmmvC/bGttuhX0G9h4g++P2hDOfJ/y\nX7Kkb9i7AgMBAAECggEAF+lvgwhQI7pzdMbvcI+I4lhdPyAev3E9DbdJFHXVlqPO\nfaXdgHsQl96waxyyMqmr5tYGxXSUM0ABQ30TNSLYSHD47TGndCtxluI3LByaDIWB\nwgi/A33hBsCY4LrXkm+gx4npvY0A14PsJlBa13tjPuImzdHVA/kJ/Z2V1pte/Ifo\nbZQyiIvBQr2gPwTd47qHFFDbapuCl1hR4Fv7ziHBjEyrbCzJPzP9Vi667Rr4EzSm\nwEbpZS4v//Ww/Rt2iKEJjR81QeB4QM1tvA+dXa4qp3Bwt5LyYTB1BSuJtwY+UNUl\n/6kTUSohVP1jGSuEWcXOQNb+cPBN5YY40AH7h+/EmQKBgQD6AtNbkw6nl+8eg4Cg\nHFOTHfFmTzYy0HH1caRvoVPEN1nQ3FiHsbhc6YGs087OAekdQ5Xq+Gcv/h1gmzJq\n0hd+sFeas+qfrNacuSAFFk8K6SEPhlAO0C2bNxbtS9f9HT/8hd6sIz9Qmcf0Uhqe\n9khtSEccQi8VP49Puvip1RSoVQKBgQDk8Qi/x5xqEU5zbmNcxGRCccQBEUGbavbH\nEOlo16lov6nssz+J8F4WBULhJybnXgmSa+mqRyUw1mqMdhcftIGCRZVWM2oUw9S0\npk3uWiaE+d42l4+9VH9j1AIbr0+S1d/pwIW4yNj+9c4+/GiWBtd40zNkTtiSOl5Y\nIkMl0DjMzwKBgQDdhaVrDZk9jFT2j4Rn2dF/mFdt1J/sVF+1H9WYh7SmNnkhpCvZ\nR/JYeRpKXX5vcKfyIxFyGlmr35h+IeWBWtgwi+WDkQlCJC4gvbOObl7pBvohPFwx\nU+olDqIE7l/ZyZIJmUBc+/o825WdeSZXVVeFZTaE5mu7gw7jkYKFUOU15QKBgBLb\nX5McR9/cqQ+M6hY7/t4SLMjBuRuqBcWDuRXvnX6JOt/KK9OavsUljcqpxOSNtFAh\nH0/tKD0LjB8hounzni8yuAgvl+856g0vHYAiYMXXJtxsQ2SezxdT4RCSsgUwJI9G\nUj1UHbtyV5iMhbjFu32yN6ttax0wPZEY0VsN+X+1AoGBAPaAbxeIQPXdjuX+Lmbc\nYJSXJlDEbBVXHWrLpszkQd7fDXgL6fG41lxjCx774Onn5aJGkvuKMPw8cI+dsMZj\neCGryk5RpdTpF47WPJG/iXYzkp6Cf8QnICldZ01JMHlhCL2im9UPabvSC12rB3lR\nvTQPsWAGMjQWp44hHg4DOQFH\n-----END PRIVATE KEY-----\n",
-    "client_email": "ilef-cloud-service@ilef-cloud.iam.gserviceaccount.com",
-    "client_id": "100717358151444763844",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ilef-cloud-service%40ilef-cloud.iam.gserviceaccount.com",
-    "universe_domain": "googleapis.com"
-}
-
+GCP_SERVICE_ACCOUNT_INFO = vault_secrets.get('GCP_SERVICE_ACCOUNT_INFO')
 
 # Hetzner configuration
 HETZNER_API_TOKEN = vault_secrets.get('HETZNER_API_TOKEN')
