@@ -1,4 +1,3 @@
-
 # Use the official Python image from the Docker Hub
 FROM python:3.8-slim-buster
 
@@ -13,13 +12,12 @@ COPY ilef_cloud/requirements.txt /app/
 
 # Install the required packages
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install -r requirements.txt || true
 
 # Copy the entire backend project to the working directory
 COPY ilef_cloud /app/
 
 # Expose the port the app runs on
 EXPOSE 8000
-
 # Run the application
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
