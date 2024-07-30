@@ -1,8 +1,10 @@
+from datetime import timedelta
 import os
 import hvac
+from decouple import config
 
 # Vault configuration
-VAULT_ADDR = 'http://95.217.11.89:8200'  # Replace with your Vault server address
+VAULT_ADDR = config('VAULT_ADDR')  # Replace with your Vault server address
 VAULT_TOKEN = os.getenv('VAULT_TOKEN')  # Securely get the Vault token from environment variables
 VAULT_SECRET_PATH = 'ilef/myapp'  # Correct path without trailing slash
 
@@ -48,14 +50,14 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # See https://docs.djangoproject.com/en/1.7/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'uw7s_r-tt(w8#bp&c5t%jr$c4wd*0ql+x=xw4=gv2d)qz#+_l('
+SECRET_KEY = vault_secrets.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 TEMPLATE_DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -67,11 +69,17 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'drf_yasg',
+    'rest_framework_simplejwt',
+    'corsheaders',
     'cloud_providers',
     'configurations',
+    'core'
 )
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -161,11 +169,6 @@ LOGGING = {
         },
     },
     'loggers': {
-        # 'django': {
-        #     'handlers': ['console', 'file'],
-        #     'level': 'DEBUG',
-        #     'propagate': True,
-        # },
         'django.request': {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
@@ -179,11 +182,31 @@ LOGGING = {
     },
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=10),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': False,
+}
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:4200",
+    config('FRONT_ADDR')
+]
+
+# DOCKERHUB ACCOUNT CERDS
+DOCKER_HUB_USERNAME = vault_secrets.get('DOCKER_HUB_USERNAME')
+DOCKER_HUB_PASSWORD = vault_secrets.get('DOCKER_HUB_PASSWORD')
+
+# CORS_ALLOW_ALL_ORIGINS = True # to allow all orings
 SSH_PRIVATE_KEY = vault_secrets.get('SSH_PRIVATE_KEY')
-# SSH_PRIVATE_KEY_PATH = '/home/mahrezbh/.ssh/id_rsa'
-# SSH_ILEF_PRIVATE_KEY_PATH = '/home/mahrezbh/Desktop/pfe/Workspace/ilef_cloud/cloud_providers/services/ilef.pem'
 SSH_PUBLIC_KEY = vault_secrets.get('SSH_PUBLIC_KEY')
-# SSH_PUBLIC_KEY_PATH = '/home/mahrezbh/.ssh/id_rsa.pub'
 
 # AZURE Configuration
 AZURE_TENANT_ID = vault_secrets.get('AZURE_TENANT_ID')
@@ -194,26 +217,31 @@ AZURE_RESOURCE_GROUP = vault_secrets.get('AZURE_RESOURCE_GROUP')
 AZURE_LOCATION = vault_secrets.get('AZURE_LOCATION')
 AZURE_STORAGE_CONNECTION_STRING = vault_secrets.get('AZURE_STORAGE_CONNECTION_STRING')
 AZURE_STORAGE_ACCOUNT_KEY = vault_secrets.get('AZURE_STORAGE_ACCOUNT_KEY')
-
+AZURE_DEFAULT_BUCKET = vault_secrets.get('AZURE_DEFAULT_BUCKET')
 
 # AWS Configuration
 AWS_ACCESS_KEY_ID = vault_secrets.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = vault_secrets.get('AWS_SECRET_ACCESS_KEY')
 AWS_REGION = vault_secrets.get('AWS_REGION')
 AWS_SSH_PRIVATE_KEY = vault_secrets.get('AWS_SSH_PRIVATE_KEY')
-# AWS_SSH_PRIVATE_KEY_PATH = '/home/mahrezbh/Desktop/pfe/Workspace/ilef_cloud/cloud_providers/services/ilef.pem'
+
+AWS_EKS_CLUSTER_ROLE_ARN = None
+AWS_EKS_NODE_ROLE_ARN = None
+AWS_DEFAULT_KEY_NAME = vault_secrets.get('AWS_DEFAULT_KEY_NAME')
+AWS_DEFAULT_BUCKET = vault_secrets.get('AWS_DEFAULT_BUCKET')
 
 # GCP Configuration
 GCP_PROJECT_ID = vault_secrets.get('GCP_PROJECT_ID')
 GCP_ZONE = vault_secrets.get('GCP_ZONE')
 GCP_BILLING_ACCOUNT_ID = vault_secrets.get('GCP_BILLING_ACCOUNT_ID')
-GCP_SERVICE_ACCOUNT_FILE = '/home/mahrezbh/Desktop/pfe/Workspace/ilef_cloud/cloud_providers/services/ilef-cloud-fcc0cf91f94b.json'
+GCP_DEFAULT_BUCKET = vault_secrets.get('GCP_DEFAULT_BUCKET')
+GCP_SERVICE_ACCOUNT_INFO = vault_secrets.get('GCP_SERVICE_ACCOUNT_INFO')
 
 # Hetzner configuration
 HETZNER_API_TOKEN = vault_secrets.get('HETZNER_API_TOKEN')
+HETZNER_DEFAULT_KEY_NAME = vault_secrets.get('HETZNER_DEFAULT_KEY_NAME')
 
-NEXUS_REGISTRY_URL = "95.217.11.89"
-# NEXUS_REGISTRY_URL = vault_secrets.get('NEXUS_REGISTRY_URL')
+NEXUS_REGISTRY_URL = vault_secrets.get('NEXUS_REGISTRY_URL')
 NEXUS_REGISTRY_DEFAULT_PORT = vault_secrets.get('NEXUS_REGISTRY_DEFAULT_PORT')
 NEXUS_REGISTRY_DOCKER_PORT = vault_secrets.get('NEXUS_REGISTRY_DOCKER_PORT')
 NEXUS_REGISTRY_USERNAME = vault_secrets.get('NEXUS_REGISTRY_USERNAME')

@@ -1,3 +1,4 @@
+from .utils import get_image_name
 from django.utils.crypto import get_random_string
 from datetime import datetime
 from time import sleep
@@ -181,9 +182,9 @@ class UploadFileToS3(APIView):
         object_name = request.data.get('object_name', file_obj.name)
 
         file_path = os.path.join(settings.MEDIA_ROOT, file_obj.name)
-        with open(file_path, 'wb+') as f:
-            for chunk in file_obj.chunks():
-                f.write(chunk)
+        # with open(file_path, 'wb+') as f:
+        #     for chunk in file_obj.chunks():
+        #         f.write(chunk)
 
         try:
             response = aws_manager.manage_file('upload_file', file_path, bucket_name, object_name)
@@ -805,13 +806,27 @@ class RetrieveCosts(APIView):
 
 
 class DeployDockerImage(APIView):
+    DEFAULT_PROVIDER_SERVER_TYPE = {
+        'aws': 't2.micro',
+        'azure': 'Standard_DS1_v2',
+        'gcp': 'n1-standard-1',
+        'hetzner': 'cpx41'
+    }
+
     def post(self, request):
         provider = request.data.get('provider')
+        print(f'data: {request.data}')
         server_name = request.data.get('server_name')
         server_type = request.data.get('server_type')
         os_image = request.data.get('os_image', get_default_os_image(provider))
         image = request.data.get('image')
-        ssh_key_id = request.data.get('ssh_key_id', settings.SSH_PUBLIC_KEY)
+        if not server_type:
+            server_type = self.DEFAULT_PROVIDER_SERVER_TYPE[provider]
+        if not server_name:
+            server_name = get_image_name(image, provider=provider)
+        print(f'server_name: {server_name}')
+        # ssh_key_id = request.data.get('ssh_key_id', settings.SSH_PUBLIC_KEY)
+        ssh_key_id = request.data.get('ssh_key_id')
         ssh_private_key = settings.SSH_PRIVATE_KEY
         ports = request.data.get('ports', inspect_image(image))
         if not all([provider, server_name, server_type, os_image, image]):
@@ -819,9 +834,13 @@ class DeployDockerImage(APIView):
 
         try:
             if provider == 'hetzner':
+                if not ssh_key_id:
+                    ssh_key_id = settings.HETZNER_DEFAULT_KEY_NAME
                 manager = HetznerManager()
                 response = manager.create_docker_image_server(server_name, server_type, image, os_image, ssh_key_id)
             elif provider == 'gcp':
+                if not ssh_key_id:
+                    ssh_key_id = settings.SSH_PUBLIC_KEY
                 image_family = os_image.get('image_family')
                 image_project = os_image.get('image_project')
                 manager = GCPManager()
@@ -829,9 +848,12 @@ class DeployDockerImage(APIView):
                 response = manager.create_docker_image_server(
                     server_name, server_type, image, source_image)
             elif provider == 'aws':
+                if not ssh_key_id:
+                    ssh_key_id = settings.AWS_DEFAULT_KEY_NAME
                 image_id = os_image.get('image_id')
                 manager = AWSManager()
                 response = manager.create_docker_image_server(
+                    instance_name=server_name,
                     image_id=image_id,
                     instance_type=server_type,
                     key_name=ssh_key_id,
@@ -839,6 +861,8 @@ class DeployDockerImage(APIView):
                     ssh_private_key=settings.AWS_SSH_PRIVATE_KEY
                 )
             elif provider == 'azure':
+                if not ssh_key_id:
+                    ssh_key_id = settings.SSH_PUBLIC_KEY
                 image_reference = {
                     'publisher': os_image.get('publisher', 'Canonical'),
                     'offer': os_image.get('offer', '0001-com-ubuntu-server-jammy'),
@@ -880,7 +904,7 @@ class DeployDockerImage(APIView):
 
 class DeployDockerImageToCluster(APIView):
     def post(self, request):
-        provider = request.data.get('provider')
+        provider = request.data.get('provider', 'azure')
         docker_image = request.data.get('image')
         docker_image_name = docker_image.split('/')[-1].replace('/', '-').replace(':', '-').replace('_', '-')
         cluster_name = request.data.get('cluster_name', f'cluster-{docker_image_name}-{get_random_string(4)}')
@@ -905,7 +929,7 @@ class DeployDockerImageToCluster(APIView):
                 response = manager.deploy_to_cluster(cluster_name, deployment_yaml, service_yaml)
             elif provider == 'azure':
                 manager = AzureManager()
-                response = manager.create_deploy_and_get_ip(
+                response = manager.deploy_and_create_cluster(
                     cluster_name=cluster_name,
                     image_name=docker_image,
                     service_name=service_name,
@@ -914,7 +938,7 @@ class DeployDockerImageToCluster(APIView):
             else:
                 return Response({"error": "Invalid provider"}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({"message": "Docker image deployed successfully", "response": response}, status=status.HTTP_200_OK)
+            return Response({"message": "Docker image deployed successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1189,7 +1213,7 @@ class RetrieveAzureCostsByService(APIView):
             return error_response(str(e))
 
 
-class AzureListClusters(APIView):
+class ListClusters(APIView):
     def get(self, request):
         azure_manager = AzureManager()
         try:
@@ -1197,6 +1221,54 @@ class AzureListClusters(APIView):
             return Response(clusters, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CordonNodeView(APIView):
+    def post(self, request):
+        cluster_name = request.data.get('cluster_name')
+        node_name = request.data.get('node_name')
+
+        if not all([cluster_name, node_name]):
+            return Response({"error": "Missing required parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            manager = AzureManager()
+            manager.cordon_node(cluster_name, node_name)
+            return Response({"message": "Node cordoned successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UncordonNodeView(APIView):
+    def post(self, request):
+        cluster_name = request.data.get('cluster_name')
+        node_name = request.data.get('node_name')
+
+        if not all([cluster_name, node_name]):
+            return Response({"error": "Missing required parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            manager = AzureManager()
+            manager.uncordon_node(cluster_name, node_name)
+            return Response({"message": "Node uncordoned successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DrainNodeView(APIView):
+    def post(self, request):
+        cluster_name = request.data.get('cluster_name')
+        node_name = request.data.get('node_name')
+
+        if not all([cluster_name, node_name]):
+            return Response({"error": "Missing required parameters"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            manager = AzureManager()
+            manager.drain_node(cluster_name, node_name)
+            return Response({"message": "Node drained successfully"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AzureGetCluster(APIView):
@@ -1209,7 +1281,7 @@ class AzureGetCluster(APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class AzureDeleteCluster(APIView):
+class DeleteCluster(APIView):
     def delete(self, request, cluster_name):
         azure_manager = AzureManager()
         try:
@@ -1217,3 +1289,377 @@ class AzureDeleteCluster(APIView):
             return Response({"message": "Cluster deleted successfully"}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class InstanceView(APIView):
+    def post(self, request):
+        provider = request.data.get('provider')
+        instance_name = request.data.get('name')
+        instance_type = request.data.get('machine_type')
+        zone = request.data.get('zone')
+        key_pair_name = request.data.get('key_pair_name')
+        image_id = request.data.get('image_id', None)
+
+        if not all([provider, instance_name, instance_type, zone]):
+            return error_response("Missing required parameters", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                if not key_pair_name:
+                    key_pair_name = settings.AWS_DEFAULT_KEY_NAME
+                    print(f"key_pair_name: {key_pair_name}")
+                response = manager.create_instance(instance_name, instance_type, key_pair_name, image_id=image_id)
+            elif provider == 'azure':
+                if not key_pair_name:
+                    key_pair_name = settings.SSH_PUBLIC_KEY
+                manager = AzureManager()
+                image_reference = {
+                    'publisher': 'Canonical',
+                    'offer': '0001-com-ubuntu-server-jammy',
+                    'sku': '22_04-lts',
+                    'version': 'latest'
+                }
+                nic_name = f'{instance_name}-nic'
+                public_ip_name = f'{instance_name}-ip'
+                vnet_name = 'my-vnet'
+                subnet_name = 'my-subnet'
+                nsg_name = 'my-nsg'
+
+                manager.create_virtual_network(vnet_name, subnet_name)
+                manager.create_network_security_group(nsg_name, ports=[22, 80])
+                manager.associate_nsg_with_subnet(vnet_name, subnet_name, nsg_name)
+                manager.create_network_interface(nic_name, vnet_name, subnet_name, public_ip_name)
+
+                response = manager.create_instance(instance_name, instance_type, image_reference, ssh_key=key_pair_name, nic_name=nic_name)
+            elif provider == 'gcp':
+                if not key_pair_name:
+                    key_pair_name = settings.SSH_PUBLIC_KEY
+                manager = GCPManager()
+                image_family = 'debian-11'
+                image_project = 'debian-cloud'
+                source_image = f"projects/{image_project}/global/images/family/{image_family}"
+                print(f"source_image: {source_image}")
+                response = manager.create_instance(instance_name, instance_type, source_image, key_pair_name)
+            elif provider == 'hetzner':
+                if not key_pair_name:
+                    key_pair_name = settings.HETZNER_DEFAULT_KEY_NAME
+                print(f"key_pair_name: {key_pair_name}")
+                manager = HetznerManager()
+                response = manager.create_instance(instance_name, instance_type, 'ubuntu-20.04', key_pair_name)
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "Instance created successfully", status.HTTP_201_CREATED)
+        except Exception as e:
+            return error_response(str(e))
+
+    def get(self, request):
+        provider = request.query_params.get('provider')
+
+        instances = []
+
+        try:
+            if provider in ['aws', None]:
+                manager = AWSManager()
+                aws_instances = manager.list_instances()
+                # serialized_aws_instances = [manager.serialize_instance(instance) for instance in aws_instances]
+                instances.extend(aws_instances)
+
+            if provider in ['azure', None]:
+                manager = AzureManager()
+                azure_instances = manager.list_instances()
+                instances.extend(azure_instances)
+
+            if provider in ['gcp', None]:
+                manager = GCPManager()
+                gcp_instances = manager.list_instances()
+                instances.extend(gcp_instances)
+
+            if provider in ['hetzner', None]:
+                manager = HetznerManager()
+                hetzner_instances = manager.list_instances()
+                instances.extend(hetzner_instances)
+
+            return success_response(instances)
+        except Exception as e:
+            return error_response(str(e))
+
+
+class StartInstance(APIView):
+    def post(self, request):
+        instance = request.data.get('instance')
+        provider = instance.get('provider')
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                response = manager.manage_instance('start_instances', instance['id'])
+            elif provider == 'azure':
+                manager = AzureManager()
+                response = manager.manage_instance('start', vm_name=instance['name'])
+            elif provider == 'gcp':
+                manager = GCPManager()
+                response = manager.manage_instance('start', instance['name'])
+            elif provider == 'hetzner':
+                manager = HetznerManager()
+                response = manager.manage_instance('poweron', instance['id'])
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "Instance stopped successfully")
+        except Exception as e:
+            return error_response(str(e))
+
+
+class StopInstance(APIView):
+    def post(self, request):
+        instance = request.data.get('instance')
+        provider = instance.get('provider')
+        print(instance)
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                response = manager.manage_instance('stop_instances', instance['id'])
+            elif provider == 'azure':
+                manager = AzureManager()
+                response = manager.manage_instance('power_off', vm_name=instance['name'])
+            elif provider == 'gcp':
+                manager = GCPManager()
+                response = manager.manage_instance('stop', instance['name'])
+            elif provider == 'hetzner':
+                manager = HetznerManager()
+                response = manager.manage_instance('shutdown', instance['id'])
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "Instance stopped successfully")
+        except Exception as e:
+            return error_response(str(e))
+
+
+class RestartInstance(APIView):
+    def post(self, request):
+        instance = request.data.get('instance')
+        provider = instance.get('provider')
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                response = manager.manage_instance('reboot_instances', instance['id'])
+            elif provider == 'azure':
+                manager = AzureManager()
+                response = manager.manage_instance('restart', instance['name'])
+                # response = manager.manage_instance('start', instance['name'])
+            elif provider == 'gcp':
+                manager = GCPManager()
+                response = manager.manage_instance('stop', instance['name'])
+                response = manager.manage_instance('start', instance['name'])
+            elif provider == 'hetzner':
+                manager = HetznerManager()
+                response = manager.manage_instance('reboot', instance['id'])
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "Instance restarted successfully")
+        except Exception as e:
+            return error_response(str(e))
+
+
+class TerminateInstance(APIView):
+    def post(self, request):
+        instance = request.data.get('instance')
+        provider = instance.get('provider')
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                response = manager.manage_instance('terminate_instances', instance['id'])
+            elif provider == 'azure':
+                manager = AzureManager()
+                response = manager.delete_instance(vm_name=instance['name'])
+            elif provider == 'gcp':
+                manager = GCPManager()
+                response = manager.terminate_instance(instance['name'])
+            elif provider == 'hetzner':
+                manager = HetznerManager()
+                response = manager.delete_instance(instance['id'])
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "Instance terminated successfully")
+        except Exception as e:
+            return error_response(str(e))
+
+
+class ListAllObjects(APIView):
+    def get(self, request):
+        providers = request.query_params.get('providers', 'aws,azure,gcp,hetzner').split(',')
+
+        objects = []
+
+        try:
+            for provider in providers:
+                if provider == 'aws':
+                    manager = AWSManager()
+                    buckets = manager.list_buckets()
+                    for bucket in buckets:
+                        bucket_name = bucket['Name']
+                        aws_objects = manager.list_objects(bucket_name)
+                        for obj in aws_objects:
+                            objects.append({
+                                "id": obj['ETag'].strip('"'),
+                                "provider": "aws",
+                                "bucket": bucket_name,
+                                "name": obj['Key'],
+                                "size": obj['Size'],
+                                "last_modified": obj['LastModified'],
+                                "created_at": obj['LastModified']
+                            })
+
+                if provider == 'azure':
+                    manager = AzureManager()
+                    azure_buckets = manager.list_buckets()
+                    for bucket in azure_buckets:
+                        bucket_name = bucket['name']
+                        azure_objects = manager.list_objects(bucket_name)
+                        for obj in azure_objects:
+                            objects.append({
+                                "id": obj['name'],  # Assuming name as unique identifier
+                                "provider": "azure",
+                                "bucket": bucket_name,
+                                "name": obj['name'],
+                                "size": obj['size'],
+                                "last_modified": obj['last_modified'],
+                                "created_at": obj['last_modified']
+                            })
+
+                if provider == 'gcp':
+                    manager = GCPManager()
+                    gcp_buckets = manager.list_buckets()
+                    for bucket in gcp_buckets:
+                        bucket_name = bucket.name
+                        gcp_objects = manager.list_objects(bucket_name)
+                        for obj in gcp_objects:
+                            objects.append({
+                                "id": obj.etag,  # Assuming id as unique identifier
+                                "provider": "gcp",
+                                "bucket": bucket_name,
+                                "name": obj.name,
+                                "size": obj.size,
+                                "last_modified": obj.updated,
+                                "created_at": obj.time_created
+                            })
+
+            return success_response(objects)
+        except Exception as e:
+            return error_response(str(e))
+
+
+class GeneratePresignedUrl(APIView):
+    def post(self, request):
+        provider = request.data.get('provider')
+        bucket_name = request.data.get('bucket_name')
+        object_name = request.data.get('object_name')
+        container_name = request.data.get('container_name', f"file-{object_name.replace('.', '-').replace(' ', '-').replace('_', '-').lower()}")
+        print(f"container_name: {container_name}")
+        print(f"bucket_name: {bucket_name}")
+        expiration = request.data.get('expiration', 3600)
+
+        if not provider or not bucket_name or not object_name:
+            return error_response("Missing required parameters", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                url = manager.generate_presigned_url(bucket_name, object_name, expiration)
+            elif provider == 'azure':
+                manager = AzureManager()
+                url = manager.generate_presigned_url(bucket_name, container_name, object_name, expiration)
+            elif provider == 'gcp':
+                manager = GCPManager()
+                url = manager.generate_presigned_url(bucket_name, object_name, expiration)
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response({'url': url})
+        except Exception as e:
+            return error_response(str(e))
+
+
+class UploadFile(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    DEFAULT_BUCKETS = {
+        'aws': settings.AWS_DEFAULT_BUCKET,
+        'azure': settings.AZURE_DEFAULT_BUCKET,
+        'gcp': settings.GCP_DEFAULT_BUCKET
+    }
+
+    def post(self, request):
+        provider = request.data.get('provider')
+        bucket_name = request.data.get('bucket_name')
+        if not bucket_name:
+            bucket_name = self.DEFAULT_BUCKETS[provider]
+        object_name = request.data.get('object_name', "").lower()
+        file_obj = request.FILES.get('file')
+
+        if not provider or not bucket_name or not file_obj:
+            return error_response("Missing required parameters: provider, bucket_name, or file", status.HTTP_400_BAD_REQUEST)
+
+        file_path = os.path.join(settings.MEDIA_ROOT, file_obj.name)
+        with open(file_path, 'wb+') as f:
+            for chunk in file_obj.chunks():
+                f.write(chunk)
+
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                object_name = object_name or file_obj.name
+                response = manager.manage_file('upload_file', file_path, bucket_name, object_name)
+            elif provider == 'azure':
+                manager = AzureManager()
+                container_name = request.data.get('container_name', f"file-{file_obj.name.replace('.', '-').replace(' ', '-').replace('_', '-').lower()}")
+                blob_name = object_name or file_obj.name.lower().replace('_', '')
+                print(f'container_name => {container_name}')
+                print(f'blob_name => {blob_name}')
+                response = manager.manage_file('upload_blob', bucket_name, container_name, file_path, blob_name)
+            elif provider == 'gcp':
+                manager = GCPManager()
+                object_name = object_name or file_obj.name.lower()
+                response = manager.manage_file('upload_from_filename', file_path, bucket_name, object_name)
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            os.remove(file_path)  # Optionally remove the file after upload
+            return success_response(response, "File uploaded successfully")
+        except Exception as e:
+            return error_response(str(e))
+
+
+class DeleteObject(APIView):
+    def post(self, request):
+        provider = request.data.get('provider')
+        bucket_name = request.data.get('bucket_name')
+        object_name = request.data.get('object_name')
+        container_name = request.data.get('container_name', f"file-{object_name.replace('.', '-').replace(' ', '-').replace('_', '-').lower()}")
+        print(f"container_name: {container_name}")
+        print(f"bucket_name: {bucket_name}")
+        print(f"object_name: {object_name}")
+
+        if not provider or not bucket_name or not object_name:
+            return error_response("Missing required parameters", status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if provider == 'aws':
+                manager = AWSManager()
+                response = manager.manage_file('delete_object', None, bucket_name, object_name)
+            elif provider == 'azure':
+                manager = AzureManager()
+                response = manager.delete_object(bucket_name, container_name, object_name)
+            elif provider == 'gcp':
+                manager = GCPManager()
+                response = manager.delete_object(bucket_name, object_name)
+            else:
+                return error_response("Invalid provider", status.HTTP_400_BAD_REQUEST)
+
+            return success_response(response, "File deleted successfully")
+        except Exception as e:
+            return error_response(str(e))
